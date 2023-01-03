@@ -56,12 +56,46 @@ class ElementTag:
         return self.__repr__()
 
 
+# Dataset class.
+class Dataset:
+
+    """A DICOM dataset, containing multiple data elements."""
+
+    def __init__(self, elements: List):
+
+        """Create the dataset object."""
+
+        self.elements = elements
+
+    def find_elements_by_tag(self, tag: ElementTag) -> List:
+
+        """Find elements by element tag."""
+
+        elements = []
+        for item in self.elements:
+            if item.tag == tag:
+                elements.append(item)
+        return elements
+
+    def __repr__(self) -> str:
+
+        """Return a string representation of the dataset."""
+
+        return 'Dataset([' + map(str, self.elements).join(',\n') + '])'
+
+    def __str__(self) -> str:
+
+        """Return a string representation of the dataset."""
+
+        return self.__repr__()
+
+
 # DICOM file object.
 class DICOM:
 
     """A DICOM file."""
 
-    def __init__(self, path: str, preamble: bytes, dataset: List):
+    def __init__(self, path: str, preamble: bytes, dataset: Dataset):
     
         """Create the DICOM file object."""
 
@@ -73,11 +107,7 @@ class DICOM:
 
         """Find elements by element tag."""
 
-        elements = []
-        for item in self.dataset:
-            if item.tag == tag:
-                elements.append(item)
-        return elements
+        return self.dataset.find_elements_by_tag(tag)
 
     def __repr__(self) -> str:
 
@@ -97,7 +127,7 @@ class DataElement:
 
     """A DICOM data element object within a dataset."""
 
-    def __init__(self, tag: ElementTag, val_repr: str, val_length: int, val_data: bytes, children: List):
+    def __init__(self, tag: ElementTag, val_repr: str, val_length: int, val_data: bytes, children: Dataset):
 
         """Create a new data element."""
 
@@ -119,7 +149,7 @@ class DataElement:
 
         """Append a child to the element."""
 
-        self.children += children
+        self.children.elements += children
 
     def __repr__(self) -> str:
 
@@ -138,7 +168,7 @@ class ItemDataElement(DataElement):
 
     """An item data element, a special type of data element."""
 
-    def __init__(self, val_length: int, val_data: bytes, children: List):
+    def __init__(self, val_length: int, val_data: bytes, children: Dataset):
 
         """Create a new data element."""
 
@@ -165,7 +195,7 @@ class ItemDelimitationElement(DataElement):
 
     """An item delimitation element, a special type of data element."""
 
-    def __init__(self, val_length: int, val_data: bytes, children: List):
+    def __init__(self, val_length: int, val_data: bytes, children: Dataset):
 
         """Create a new data element."""
 
@@ -192,7 +222,7 @@ class SequenceDelimitationElement(DataElement):
 
     """An sequence delimitation element, a special type of data element."""
 
-    def __init__(self, val_length: int, val_data: bytes, children: List):
+    def __init__(self, val_length: int, val_data: bytes, children: Dataset):
 
         """Create a new data element."""
 
@@ -234,7 +264,7 @@ def load(path: str) -> DICOM:
     return DICOM(path, preamble, dataset)
 
 # Read the DICOM dataset from an open file.
-def read_dataset(f: io.BufferedIOBase) -> List:
+def read_dataset(f: io.BufferedIOBase) -> Dataset:
 
     """Recursively read the DICOM dataset, stopping when we reach a delimitation or we run out of data."""
 
@@ -257,7 +287,7 @@ def read_dataset(f: io.BufferedIOBase) -> List:
         if isinstance(item, SequenceDelimitationElement) or isinstance(item, ItemDelimitationElement):
             break
 
-    return dataset
+    return Dataset(dataset)
 
 # Read a single DICOM dataset item from an open file.
 def read_dataset_item(f: io.BufferedIOBase) -> DataElement:
@@ -277,28 +307,28 @@ def read_dataset_item(f: io.BufferedIOBase) -> DataElement:
         length = int.from_bytes(f.read(4), byteorder='little')
         if length != UNDEFINED_LENGTH:
             # Non-undefined length, read the data.
-            return ItemDataElement(length, f.read(length), [])
+            return ItemDataElement(length, f.read(length), Dataset([]))
         else:
             # Undefined length.
-            return ItemDataElement(length, None, [])
+            return ItemDataElement(length, None, Dataset([]))
     elif group_num == 0xfffe and element_num == 0xe00d:
         # Item delimitation element.
         length = int.from_bytes(f.read(4), byteorder='little')
         if length != UNDEFINED_LENGTH:
             # Non-undefined length, read the data.
-            return ItemDelimitationElement(length, f.read(length), [])
+            return ItemDelimitationElement(length, f.read(length), Dataset([]))
         else:
             # Undefined length.
-            return ItemDelimitationElement(length, None, [])
+            return ItemDelimitationElement(length, None, Dataset([]))
     elif group_num == 0xfffe and element_num == 0xe0dd:
         # Sequence delimitation element.
         length = int.from_bytes(f.read(4), byteorder='little')
         if length != UNDEFINED_LENGTH:
             # Non-undefined length, read the data.
-            return SequenceDelimitationElement(length, f.read(length), [])
+            return SequenceDelimitationElement(length, f.read(length), Dataset([]))
         else:
             # Undefined length.
-            return SequenceDelimitationElement(length, None, [])
+            return SequenceDelimitationElement(length, None, Dataset([]))
 
     # Read the value representation type.
     value_repr = str(f.read(2), encoding='utf-8')
@@ -315,11 +345,11 @@ def read_dataset_item(f: io.BufferedIOBase) -> DataElement:
 
     # Check for an undefined length.
     if length == UNDEFINED_LENGTH:
-        return DataElement(ElementTag(group_num, element_num), value_repr, length, None, [])
+        return DataElement(ElementTag(group_num, element_num), value_repr, length, None, Dataset([]))
     else:
         # Read the data.
         data = f.read(length)
-        return DataElement(ElementTag(group_num, element_num), value_repr, length, data, [])
+        return DataElement(ElementTag(group_num, element_num), value_repr, length, data, Dataset([]))
 
 
 # Dump a DICOM file to XML.
