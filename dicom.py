@@ -281,7 +281,7 @@ def read_dataset(f: io.BufferedIOBase) -> Dataset:
 
         # If the item is of undefined length, recursively read.
         if item.is_length_undefined():
-            item.add_children(read_dataset(f))
+            item.add_children(read_dataset(f).elements)
 
         # If the item is a deliminator, stop reading.
         if isinstance(item, SequenceDelimitationElement) or isinstance(item, ItemDelimitationElement):
